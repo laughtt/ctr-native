@@ -173,6 +173,10 @@ global_variable GLuint s_glVramFramebuffer;
 internal int NativeRenderer_InitialiseGLContext(char *windowName, int fullscreen)
 {
 	SDL_WindowFlags windowFlags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE;
+#if defined(__EMSCRIPTEN__)
+	// NOTE(web): The canvas keeps its fixed backing size; the page scales it with CSS.
+	windowFlags &= ~SDL_WINDOW_RESIZABLE;
+#endif
 
 	if (fullscreen)
 	{
@@ -186,6 +190,21 @@ internal int NativeRenderer_InitialiseGLContext(char *windowName, int fullscreen
 		NATIVE_RENDERER_ERROR("%s\n", "Failed to initialise SDL window!");
 		return 0;
 	}
+
+#if defined(__EMSCRIPTEN__)
+	// NOTE(web): WebGL2 is an ES 3.0 context.
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+
+	if (!SDL_GL_CreateContext(g_window))
+	{
+		NATIVE_RENDERER_ERROR("Failed to create a WebGL2 context: %s\n", SDL_GetError());
+		return 0;
+	}
+
+	return 1;
+#endif
 
 	int major_version = 3;
 	int minor_version = 3;
@@ -298,7 +317,12 @@ internal void NativeRenderer_ResolveGpuMeasurements(b32 waitForResults)
 		GLint available = 0;
 		if (!waitForResults)
 		{
+#if defined(__EMSCRIPTEN__)
+			// NOTE(web): GPU timer queries are never started on WebGL2.
+			available = 1;
+#else
 			glGetQueryObjectiv(query->id, GL_QUERY_RESULT_AVAILABLE, &available);
+#endif
 			if (!available)
 			{
 				continue;
@@ -315,6 +339,11 @@ internal void NativeRenderer_ResolveGpuMeasurements(b32 waitForResults)
 
 void NativeRenderer_UpdateSwapIntervalState(int swapInterval)
 {
+#if defined(__EMSCRIPTEN__)
+	// NOTE(web): The browser owns presentation; pacing is in Native_WaitUntilVBlankTarget.
+	(void)swapInterval;
+	return;
+#endif
 	SDL_GL_SetSwapInterval(swapInterval);
 }
 
@@ -917,6 +946,25 @@ internal int NativeRenderer_Shader_CheckProgramStatus(GLuint program)
 
 internal ShaderID NativeRenderer_Shader_Compile(const char *source, bool isPsxShader)
 {
+#if defined(__EMSCRIPTEN__)
+	// NOTE(web): GLSL ES 3.00. int/sampler precision must be highp: the pack and present
+	// shaders do 16-bit integer math and WebGL defaults would be mediump/lowp.
+	const char *GLSL_HEADER_VERT = "#version 300 es\n"
+	                               "precision highp int;\n"
+	                               "precision highp float;\n"
+	                               "precision highp sampler2D;\n"
+	                               "#define varying   out\n"
+	                               "#define attribute in\n"
+	                               "#define texture2D texture\n";
+
+	const char *GLSL_HEADER_FRAG = "#version 300 es\n"
+	                               "precision highp int;\n"
+	                               "precision highp float;\n"
+	                               "precision highp sampler2D;\n"
+	                               "#define varying     in\n"
+	                               "#define texture2D   texture\n"
+	                               "out vec4 fragColor;\n";
+#else
 	const char *GLSL_HEADER_VERT = "	#version 140\n"
 	                               "	precision lowp  int;\n"
 	                               "	precision highp float;\n"
@@ -930,6 +978,7 @@ internal ShaderID NativeRenderer_Shader_Compile(const char *source, bool isPsxSh
 	                               "	#define varying     in\n"
 	                               "	#define texture2D   texture\n"
 	                               "	out vec4 fragColor;\n";
+#endif
 
 	char extra_vs_defines[1024];
 	char extra_fs_defines[1024];
@@ -1173,7 +1222,12 @@ int NativeRenderer_InitialisePSX(void)
 	GLint glMinor = 0;
 	glGetIntegerv(GL_MAJOR_VERSION, &glMajor);
 	glGetIntegerv(GL_MINOR_VERSION, &glMinor);
+#if defined(__EMSCRIPTEN__)
+	// NOTE(web): No GL_TIME_ELAPSED queries in WebGL2.
+	s_gpuTimerSupported = false;
+#else
 	s_gpuTimerSupported = (glMajor > 3) || ((glMajor == 3) && (glMinor >= 3)) || SDL_GL_ExtensionSupported("GL_ARB_timer_query");
+#endif
 	if (s_gpuTimerSupported)
 	{
 		GLuint queryIds[NATIVE_GPU_TIMER_QUERY_COUNT];
@@ -2232,7 +2286,12 @@ internal void NativeRenderer_SetViewPort(int x, int y, int width, int height)
 
 internal void NativeRenderer_SetWireframe(int enable)
 {
+#if defined(__EMSCRIPTEN__)
+	// NOTE(web): No glPolygonMode in GLES; debug wireframe is unavailable.
+	(void)enable;
+#else
 	glPolygonMode(GL_FRONT_AND_BACK, enable ? GL_LINE : GL_FILL);
+#endif
 }
 
 void NativeRenderer_UpdateVertexBuffer(const GrVertex *vertices, int num_vertices)
@@ -2262,18 +2321,24 @@ void NativeRenderer_DrawTriangles(int start_vertex, int triangles)
 
 void NativeRenderer_PushDebugLabel(const char *label)
 {
+#if defined(__EMSCRIPTEN__)
+	(void)label;
+#else
 	if (!GLAD_GL_KHR_debug)
 	{
 		return;
 	}
 	glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0x8000, strlen(label), label);
+#endif
 }
 
 void NativeRenderer_PopDebugLabel(void)
 {
+#if !defined(__EMSCRIPTEN__)
 	if (!GLAD_GL_KHR_debug)
 	{
 		return;
 	}
 	glPopDebugGroup();
+#endif
 }

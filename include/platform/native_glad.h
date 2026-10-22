@@ -26,6 +26,20 @@
  */
 
 
+#if defined(__EMSCRIPTEN__)
+#ifndef __native_glad_web_h_
+#define __native_glad_web_h_
+// NOTE(web): WebGL2 via the Emscripten GLES3 headers; glad is bypassed.
+#include <GLES3/gl3.h>
+
+#define GLAD_GL_KHR_debug 0
+
+static inline int gladLoadGL(void)
+{
+	return 1;
+}
+#endif
+#else
 #ifndef __glad_h_
 #define __glad_h_
 
@@ -3563,3 +3577,4 @@ GLAPI int GLAD_GL_KHR_debug;
 #endif
 
 #endif
+#endif // defined(__EMSCRIPTEN__)

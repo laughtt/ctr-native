@@ -32,6 +32,8 @@
 #include <string.h>
 #include "platform/native_glad.h"
 
+#if !defined(__EMSCRIPTEN__)
+
 internal void *get_proc(const char *namez);
 
 #if defined(_WIN32) || defined(__CYGWIN__)
@@ -2056,3 +2058,4 @@ int gladLoadGLES2Loader(GLADloadproc load)
 	load_GL_KHR_debug(load);
 	return GLVersion.major != 0 || GLVersion.minor != 0;
 }
+#endif // !defined(__EMSCRIPTEN__)

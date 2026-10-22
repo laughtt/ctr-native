@@ -109,8 +109,10 @@ if(CTR_NATIVE_MSVC_FRONTEND)
         /wd5287
     )
 else()
+    if(NOT EMSCRIPTEN)
+        target_compile_options(ctr_native PRIVATE -msse)
+    endif()
     target_compile_options(ctr_native PRIVATE
-        -msse
         -Wenum-conversion
         -Wenum-compare
         -Wswitch-enum
@@ -133,6 +135,30 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
 endif()
 if(MINGW)
     target_link_options(ctr_native PRIVATE -static)
+endif()
+
+if(EMSCRIPTEN)
+    # NOTE: web build. JSPI lets the never-returning CTR_Main yield to the browser.
+    set_target_properties(ctr_native PROPERTIES SUFFIX ".js")
+    target_compile_options(ctr_native PRIVATE -g2)
+    target_link_options(ctr_native PRIVATE
+        -O2 -g2
+        -sJSPI
+        -sALLOW_MEMORY_GROWTH=1
+        -sINITIAL_MEMORY=268435456
+        -sSTACK_SIZE=8388608
+        "-sEXPORTED_RUNTIME_METHODS=FS,callMain"
+        -sMODULARIZE=1
+        -sEXPORT_NAME=createCtrModule
+        -sINVOKE_RUN=0
+        -sENVIRONMENT=web
+        -sUSE_WEBGL2=1
+        -sMIN_WEBGL_VERSION=2
+        -sMAX_WEBGL_VERSION=2
+        -sGL_ENABLE_GET_PROC_ADDRESS=1
+        -sFORCE_FILESYSTEM=1
+        -sEXIT_RUNTIME=0
+    )
 endif()
 
 include(CTest)

@@ -14,6 +14,9 @@
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
+#if defined(__EMSCRIPTEN__)
+#include <emscripten.h>
+#endif
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -156,9 +159,16 @@ internal void Platform_TakeScreenshot(void)
 {
 	u8 *pixels = (u8 *)malloc(g_windowWidth * g_windowHeight * 4);
 
+#if defined(__EMSCRIPTEN__)
+	// NOTE(web): GLES has no GL_BGRA readback.
+	glReadPixels(0, 0, g_windowWidth, g_windowHeight, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+
+	SDL_Surface *surface = SDL_CreateSurfaceFrom(g_windowWidth, g_windowHeight, SDL_PIXELFORMAT_RGBA32, pixels, g_windowWidth * 4);
+#else
 	glReadPixels(0, 0, g_windowWidth, g_windowHeight, GL_BGRA, GL_UNSIGNED_BYTE, pixels);
 
 	SDL_Surface *surface = SDL_CreateSurfaceFrom(g_windowWidth, g_windowHeight, SDL_PIXELFORMAT_BGRA8888, pixels, g_windowWidth * 4);
+#endif
 
 	SDL_SaveBMP(surface, "SCREENSHOT.BMP");
 	SDL_DestroySurface(surface);
@@ -586,6 +596,25 @@ internal void Native_WaitUntilVBlankTarget(void)
 	const u64 spinWindow = Native_CounterFromMicroseconds(freq, NATIVE_VSYNC_SPIN_US);
 
 	NativePerf_BeginScope(NATIVE_PERF_BUCKET_VSYNC_WAIT);
+#if defined(__EMSCRIPTEN__)
+	{
+		// NOTE(web): CTR_Main never returns, so this is the browser's only chance to
+		// run its event loop and present the canvas. Yield exactly once per wait
+		// (JSPI); emscripten_sleep(0) when the target already passed.
+		const u64 webNow = SDL_GetPerformanceCounter();
+		unsigned int sleepMs = 0;
+
+		(void)spinWindow;
+		if (webNow < s_nextVBlankCounter)
+		{
+			sleepMs = (unsigned int)((((s_nextVBlankCounter - webNow) * 1000) + freq - 1) / freq);
+		}
+
+		emscripten_sleep(sleepMs);
+		NativePerf_EndScope(NATIVE_PERF_BUCKET_VSYNC_WAIT);
+		return;
+	}
+#endif
 	while (1)
 	{
 		const u64 now = SDL_GetPerformanceCounter();

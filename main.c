@@ -149,7 +149,12 @@ int main(int argc, char *argv[])
 	printf("[CTR Native] Starting...\n");
 	fflush(stdout);
 
+#if defined(__EMSCRIPTEN__)
+	// NOTE(web): MEMFS root. Game files come from the disc image; memcards and logs live here.
+	const char *sdlBasePath = "/";
+#else
 	const char *sdlBasePath = SDL_GetBasePath();
+#endif
 	printf("[CTR Native] SDL base path: %s\n", sdlBasePath ? sdlBasePath : "(null)");
 	fflush(stdout);
 

@@ -10,6 +10,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(__EMSCRIPTEN__)
+#include <emscripten.h>
+#endif
+
 #define NATIVE_DISC_IMAGE_PATH_MAX          1024
 #define NATIVE_DISC_IMAGE_BIN_PATH          "ctr-u.bin"
 #define NATIVE_DISC_IMAGE_RAW_SECTOR_SIZE   2352u
@@ -36,6 +40,71 @@ struct NativeDiscImageDirRecord
 
 global_variable char s_nativeDiscImagePath[NATIVE_DISC_IMAGE_PATH_MAX];
 global_variable FILE *s_nativeDiscImageFile;
+
+#if defined(__EMSCRIPTEN__)
+// NOTE(web): The disc is a JS File the user picked (Module.ctrDiscFile). Reads go
+// through a JS-side chunk cache; a miss awaits File.slice().arrayBuffer() via JSPI.
+#define NATIVE_DISC_IMAGE_WEB_CHUNK_SECTORS 256
+
+EM_JS(double, NativeDiscImage_WebFileSize, (void), {
+	const f = Module.ctrDiscFile;
+	return f ? f.size : 0;
+});
+
+// Returns 1 and fills dst on a cache hit, 0 on a miss. Synchronous, so hits never suspend.
+EM_JS(int, NativeDiscImage_WebCacheRead, (double offset, int size, unsigned char *dst), {
+	const cache = Module.ctrDiscCache;
+	if (!cache)
+		return 0;
+	const chunkBytes = Module.ctrDiscChunkBytes;
+	let done = 0;
+	while (done < size)
+	{
+		const pos = offset + done;
+		const key = Math.floor(pos / chunkBytes);
+		const chunk = cache.get(key);
+		if (!chunk)
+			return 0;
+		const inChunk = pos - key * chunkBytes;
+		const n = Math.min(size - done, chunk.length - inChunk);
+		if (n <= 0)
+			return 0;
+		HEAPU8.set(chunk.subarray(inChunk, inChunk + n), dst + done);
+		// refresh LRU order
+		cache.delete(key);
+		cache.set(key, chunk);
+		done += n;
+	}
+	return 1;
+});
+
+EM_ASYNC_JS(int, NativeDiscImage_WebFetchChunk, (double offset), {
+	const f = Module.ctrDiscFile;
+	if (!f)
+		return 0;
+	if (!Module.ctrDiscCache)
+	{
+		Module.ctrDiscCache = new Map();
+		Module.ctrDiscChunkBytes = 2352 * 256;
+	}
+	const chunkBytes = Module.ctrDiscChunkBytes;
+	const key = Math.floor(offset / chunkBytes);
+	const start = key * chunkBytes;
+	try
+	{
+		const buf = await f.slice(start, Math.min(start + chunkBytes, f.size)).arrayBuffer();
+		Module.ctrDiscCache.set(key, new Uint8Array(buf));
+		while (Module.ctrDiscCache.size > 16)
+			Module.ctrDiscCache.delete(Module.ctrDiscCache.keys().next().value);
+		return 1;
+	}
+	catch (e)
+	{
+		console.error("[CTR Native] disc read failed", e);
+		return 0;
+	}
+});
+#endif
 global_variable struct NativeDiscImageFile s_nativeDiscImageRoot;
 global_variable int s_nativeDiscImageAvailable;
 
@@ -102,6 +171,26 @@ internal int NativeDiscImage_CheckRawSectorHeader(const u8 *sector)
 
 internal int NativeDiscImage_ReadRawSector(u32 lba, u8 *sector)
 {
+#if defined(__EMSCRIPTEN__)
+	const double webOffset = (double)lba * (double)NATIVE_DISC_IMAGE_RAW_SECTOR_SIZE;
+
+	if (webOffset + NATIVE_DISC_IMAGE_RAW_SECTOR_SIZE > NativeDiscImage_WebFileSize())
+	{
+		return 0;
+	}
+
+	if (NativeDiscImage_WebCacheRead(webOffset, (int)NATIVE_DISC_IMAGE_RAW_SECTOR_SIZE, sector))
+	{
+		return 1;
+	}
+
+	if (!NativeDiscImage_WebFetchChunk(webOffset))
+	{
+		return 0;
+	}
+
+	return NativeDiscImage_WebCacheRead(webOffset, (int)NATIVE_DISC_IMAGE_RAW_SECTOR_SIZE, sector);
+#else
 	if (s_nativeDiscImageFile == NULL)
 	{
 		return 0;
@@ -119,6 +208,7 @@ internal int NativeDiscImage_ReadRawSector(u32 lba, u8 *sector)
 	}
 
 	return NativeDiscImage_CheckRawSectorHeader(sector);
+#endif
 }
 
 internal int NativeDiscImage_ReadDataSector(u32 lba, u8 *payload)
@@ -355,6 +445,26 @@ int NativeDiscImage_Init(const char *assetsDir)
 
 	s_nativeDiscImageAvailable = 0;
 	s_nativeDiscImagePath[0] = '\0';
+
+#if defined(__EMSCRIPTEN__)
+	(void)assetsDir;
+	(void)path;
+
+	// NOTE(web): No host directory search. The disc exists once JS hands us a File.
+	if (NativeDiscImage_WebFileSize() <= 0)
+	{
+		return 0;
+	}
+
+	if (!NativeDiscImage_LoadRoot())
+	{
+		return 0;
+	}
+
+	snprintf(s_nativeDiscImagePath, sizeof(s_nativeDiscImagePath), "(browser file)");
+	s_nativeDiscImageAvailable = 1;
+	return 1;
+#endif
 
 	if (s_nativeDiscImageFile != NULL)
 	{

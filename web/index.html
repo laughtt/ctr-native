@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CTR Native (web dev page)</title>
+<style>
+	:root { color-scheme: light dark; }
+	body { font-family: system-ui, sans-serif; margin: 0; padding: 16px; background: Canvas; color: CanvasText; }
+	h1 { font-size: 1.1rem; margin: 0 0 12px; }
+	.row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+	canvas { display: block; width: 100%; max-width: 800px; aspect-ratio: 4 / 3; background: #000; outline: none; }
+	pre { max-width: 800px; height: 280px; overflow: auto; background: #111; color: #ddd; padding: 8px; font-size: 12px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<h1>CTR Native - WebAssembly dev page</h1>
+<div class="row">
+	<label>Disc image (ctr-u.bin, NTSC-U, raw 2352 bytes/sector): <input id="disc" type="file" accept=".bin,.img"></label>
+	<button id="start" disabled>Start</button>
+</div>
+<canvas id="canvas" width="800" height="600" tabindex="0" oncontextmenu="event.preventDefault()"></canvas>
+<pre id="log"></pre>
+<script src="ctr_native.js"></script>
+<script>
+	const logEl = document.getElementById("log");
+	const discEl = document.getElementById("disc");
+	const startEl = document.getElementById("start");
+	const canvas = document.getElementById("canvas");
+
+	function log(text, isError) {
+		logEl.textContent += (isError ? "[err] " : "") + text + "\n";
+		logEl.scrollTop = logEl.scrollHeight;
+		(isError ? console.error : console.log)(text);
+	}
+
+	discEl.addEventListener("change", () => { startEl.disabled = !discEl.files.length; });
+
+	// Dev only: ?disc=/disc.bin reads the disc over HTTP Range requests (see serve.mjs CTR_DISC)
+	async function urlDisc(url) {
+		const size = Number((await fetch(url, { method: "HEAD" })).headers.get("Content-Length"));
+		return {
+			size,
+			slice: (a, b) => ({
+				arrayBuffer: () => fetch(url, { headers: { Range: `bytes=${a}-${b - 1}` } }).then((r) => r.arrayBuffer()),
+			}),
+		};
+	}
+	const discUrl = new URLSearchParams(location.search).get("disc");
+	if (discUrl) startEl.disabled = false;
+
+	startEl.addEventListener("click", async () => {
+		const file = discUrl ? await urlDisc(discUrl) : discEl.files[0];
+		if (!file) return;
+		startEl.disabled = true;
+		discEl.disabled = true;
+		try {
+			const mod = await createCtrModule({
+				canvas,
+				print: (t) => log(t, false),
+				printErr: (t) => log(t, true),
+				ctrDiscFile: file, // read by the EM_ASYNC_JS disc reader
+			});
+			window.ctrModule = mod;
+			mod.ctrDiscFile = file;
+			canvas.focus();
+			await mod.callMain([]);
+			log("main() returned");
+		} catch (e) {
+			log("fatal: " + (e && e.stack || e), true);
+		}
+	});
+</script>
+</body>
+</html>
