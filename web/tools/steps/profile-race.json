@@ -1,0 +1,46 @@
+[
+ {
+  "until": "/audio stream opened/.test(document.getElementById('log').textContent)",
+  "timeout": 20000
+ },
+ {
+  "key": "F8",
+  "hold": 120
+ },
+ {
+  "until": "/loaded quick state|failed/.test(document.getElementById('log').textContent)",
+  "timeout": 60000
+ },
+ {
+  "down": "c"
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "throttle": "arg"
+ },
+ {
+  "wait": 2000
+ },
+ {
+  "profile": "start"
+ },
+ {
+  "wait": 15000
+ },
+ {
+  "profile": "stop",
+  "name": "race"
+ },
+ {
+  "shot": "end"
+ },
+ {
+  "eval": "(() => { const FS = window.ctrModule.FS; return JSON.stringify(Object.fromEntries(FS.readdir('/perf').filter(f => f[0] !== '.').map(f => [f, FS.readFile('/perf/' + f, {encoding:'utf8'})]))); })()",
+  "name": "perf.json"
+ },
+ {
+  "up": "c"
+ }
+]

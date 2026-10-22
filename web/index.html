@@ -34,6 +34,9 @@
 		(isError ? console.error : console.log)(text);
 	}
 
+	// F-keys are game debug hotkeys (F5 save state, F8 load); keep the browser from reloading etc.
+	window.addEventListener("keydown", (e) => { if (/^F([1-9]|10)$/.test(e.key)) e.preventDefault(); }, true);
+
 	discEl.addEventListener("change", () => { startEl.disabled = !discEl.files.length; });
 
 	// Dev only: ?disc=/disc.bin reads the disc over HTTP Range requests (see serve.mjs CTR_DISC)
@@ -63,8 +66,18 @@
 			});
 			window.ctrModule = mod;
 			mod.ctrDiscFile = file;
+			// Dev only: ?state=/state/<name> preloads a quick save state (F8 loads it, F5 saves)
+			const stateUrl = new URLSearchParams(location.search).get("state");
+			if (stateUrl) {
+				const bytes = new Uint8Array(await (await fetch(stateUrl)).arrayBuffer());
+				mod.FS.mkdirTree("/debug/states");
+				mod.FS.writeFile("/debug/states/quick.ctrstates", bytes);
+				log(`[web] preloaded state ${stateUrl} (${bytes.length} bytes)`);
+			}
 			canvas.focus();
-			await mod.callMain([]);
+			// Dev only: ?args=--perf-dir,/perf passes command-line arguments to main()
+			const args = new URLSearchParams(location.search).get("args");
+			await mod.callMain(args ? args.split(",") : []);
 			log("main() returned");
 		} catch (e) {
 			log("fatal: " + (e && e.stack || e), true);

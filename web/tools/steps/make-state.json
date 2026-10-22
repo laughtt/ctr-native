@@ -1,0 +1,117 @@
+[
+ {
+  "wait": 15000
+ },
+ {
+  "key": "Enter"
+ },
+ {
+  "wait": 5000
+ },
+ {
+  "key": "Enter"
+ },
+ {
+  "wait": 5000
+ },
+ {
+  "key": "Enter"
+ },
+ {
+  "wait": 5000
+ },
+ {
+  "key": "Enter"
+ },
+ {
+  "wait": 5000
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "key": "ArrowDown",
+  "hold": 150
+ },
+ {
+  "wait": 700
+ },
+ {
+  "key": "ArrowDown",
+  "hold": 150
+ },
+ {
+  "wait": 700
+ },
+ {
+  "key": "c",
+  "hold": 150
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "key": "c",
+  "hold": 150
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "key": "c",
+  "hold": 150
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "key": "c",
+  "hold": 150
+ },
+ {
+  "wait": 3000
+ },
+ {
+  "key": "c",
+  "hold": 150
+ },
+ {
+  "wait": 3000
+ },
+ {
+  "key": "c",
+  "hold": 150
+ },
+ {
+  "wait": 2000
+ },
+ {
+  "key": "c",
+  "hold": 150
+ },
+ {
+  "wait": 12000
+ },
+ {
+  "down": "c"
+ },
+ {
+  "wait": 6000
+ },
+ {
+  "key": "F5",
+  "hold": 120
+ },
+ {
+  "wait": 1500
+ },
+ {
+  "saveState": "new.ctrstates"
+ },
+ {
+  "shot": "saved"
+ },
+ {
+  "up": "c"
+ }
+]

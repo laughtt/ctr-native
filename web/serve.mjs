@@ -47,6 +47,14 @@ http.createServer((req, res) => {
 		res.writeHead(206, { "Content-Type": "application/octet-stream", "Content-Length": end - start + 1, "Content-Range": `bytes ${start}-${end}/${size}` });
 		return fs.createReadStream(process.env.CTR_DISC, { start, end }).pipe(res);
 	}
+	// Dev only: CTR_STATES=<dir outside the repo> serves save states at /state/<name>
+	if (urlPath.startsWith("/state/") && process.env.CTR_STATES) {
+		const file = path.join(process.env.CTR_STATES, path.basename(urlPath));
+		if (fs.existsSync(file)) {
+			res.writeHead(200, { "Content-Type": "application/octet-stream" });
+			return fs.createReadStream(file).pipe(res);
+		}
+	}
 	if (!found) {
 		res.writeHead(404);
 		res.end("not found");

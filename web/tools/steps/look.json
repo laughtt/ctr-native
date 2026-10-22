@@ -1,0 +1,32 @@
+[
+ {
+  "until": "/audio stream opened/.test(document.getElementById('log').textContent)",
+  "timeout": 20000
+ },
+ {
+  "key": "F8",
+  "hold": 120
+ },
+ {
+  "until": "/loaded quick state|failed/.test(document.getElementById('log').textContent)",
+  "timeout": 60000
+ },
+ {
+  "wait": 1000
+ },
+ {
+  "shot": "loaded"
+ },
+ {
+  "down": "c"
+ },
+ {
+  "wait": 3000
+ },
+ {
+  "shot": "racing"
+ },
+ {
+  "up": "c"
+ }
+]
